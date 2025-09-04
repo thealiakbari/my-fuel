@@ -46,8 +46,8 @@ jobs:
       - name: Install Dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Lint (non-blocking)
-        run: yarn lint || true
+      - name: Lint (report only)
+        run: npx eslint "{src,apps,libs,test}/**/*.ts" --quiet || true
 
       - name: Run Tests
         env:
