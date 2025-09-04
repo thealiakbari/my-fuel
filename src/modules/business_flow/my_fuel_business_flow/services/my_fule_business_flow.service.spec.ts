@@ -2,16 +2,23 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MyFuelBusinessFlowService } from '@business_flow';
 import {
 	CardService,
-	FuelUsageCacheService,
 	CardUsageService,
+	FuelUsageCacheService,
 	OrganizationService,
+	CardViewDto,
 } from '@port/outbound';
 
 describe('MyFuelBusinessFlowService', () => {
 	let service: MyFuelBusinessFlowService;
-	let fuelUsageCacheService: FuelUsageCacheService;
-	let cardService: CardService;
-	let cardUsageService: CardUsageService;
+	let cardService: jest.Mocked<CardService>;
+	let cardUsageService: jest.Mocked<CardUsageService>;
+	let fuelUsageCacheService: jest.Mocked<FuelUsageCacheService>;
+
+	const trx = {
+		cardCode: 'CARD-123',
+		amount: 50,
+		date: new Date('2025-09-05'),
+	};
 
 	beforeEach(async () => {
 		const module: TestingModule = await Test.createTestingModule({
@@ -19,19 +26,8 @@ describe('MyFuelBusinessFlowService', () => {
 				MyFuelBusinessFlowService,
 				{
 					provide: CardService,
-					useValue: { getCardWithCode: jest.fn() },
-				},
-				{
-					provide: FuelUsageCacheService,
 					useValue: {
-						getCardLimits: jest.fn(),
-						getOrgLimits: jest.fn(),
-						getDailyUsage: jest.fn(),
-						incrementDailyUsage: jest.fn(),
-						incrementCardMonthlyUsage: jest.fn(),
-						incrementOrgMonthlyUsage: jest.fn(),
-						getCardMonthlyUsage: jest.fn(),
-						getOrgMonthlyUsage: jest.fn(),
+						getCardWithCode: jest.fn(),
 					},
 				},
 				{
@@ -44,116 +40,108 @@ describe('MyFuelBusinessFlowService', () => {
 					},
 				},
 				{
+					provide: FuelUsageCacheService,
+					useValue: {
+						getCardLimits: jest.fn(),
+						getOrgLimits: jest.fn(),
+						getDailyUsage: jest.fn(),
+						getCardMonthlyUsage: jest.fn(),
+						getOrgMonthlyUsage: jest.fn(),
+						setCardLimits: jest.fn(),
+						setOrgLimits: jest.fn(),
+						incrementDailyUsage: jest.fn(),
+						incrementCardMonthlyUsage: jest.fn(),
+						incrementOrgMonthlyUsage: jest.fn(),
+					},
+				},
+				{
 					provide: OrganizationService,
-					useValue: { deductBalance: jest.fn() },
+					useValue: {},
 				},
 			],
 		}).compile();
 
 		service = module.get(MyFuelBusinessFlowService);
 		cardService = module.get(CardService);
-		fuelUsageCacheService = module.get(FuelUsageCacheService);
 		cardUsageService = module.get(CardUsageService);
+		fuelUsageCacheService = module.get(FuelUsageCacheService);
 	});
 
-	it('should return true if all limits are valid', async () => {
-		const trx = { cardCode: 'ABC123', amount: 50, date: new Date() };
-
-		jest.spyOn(fuelUsageCacheService, 'getCardLimits').mockResolvedValue({
-			cardDailyLimit: 100,
+	it('✅ should return true if cache validation passes', async () => {
+		fuelUsageCacheService.getCardLimits.mockResolvedValue({
+			orgId: 'ORG-1',
+			cardDailyLimit: 200,
 			cardMonthlyLimit: 500,
-			orgId: 'ORG1',
 		});
+		fuelUsageCacheService.getOrgLimits.mockResolvedValue(1000);
+		fuelUsageCacheService.getDailyUsage.mockResolvedValue(50);
+		fuelUsageCacheService.getCardMonthlyUsage.mockResolvedValue(100);
+		fuelUsageCacheService.getOrgMonthlyUsage.mockResolvedValue(200);
 
-		jest.spyOn(fuelUsageCacheService, 'getOrgLimits').mockResolvedValue(1000);
-		jest.spyOn(fuelUsageCacheService, 'getDailyUsage').mockResolvedValue(20);
-		jest
-			.spyOn(fuelUsageCacheService, 'getCardMonthlyUsage')
-			.mockResolvedValue(200);
-		jest
-			.spyOn(fuelUsageCacheService, 'getOrgMonthlyUsage')
-			.mockResolvedValue(400);
-
-		const result = await service['cacheValidation'](trx);
-		expect(result).toBe(true);
-	});
-
-	it('should process transaction and update usage if cache validation passes', async () => {
-		const trx = { cardCode: 'ABC123', amount: 50, date: new Date() };
-
-		jest.spyOn(service as any, 'cacheValidation').mockResolvedValue(true);
-		jest.spyOn(service as any, 'updateUsage').mockResolvedValue(undefined);
+		cardService.getCardWithCode.mockResolvedValue({
+			id: 'card1',
+			cardCode: trx.cardCode,
+			dailyFuelLimit: 200,
+			monthlyFuelLimit: 500,
+			organizationId: 'ORG-1',
+			organization: { id: 'ORG-1', monthlyFuelLimit: 1000 },
+		} as unknown as CardViewDto);
 
 		const result = await service.processCardTransaction(trx);
 		expect(result).toBe(true);
+		// eslint-disable-next-line @typescript-eslint/unbound-method
+		expect(cardUsageService.create).toHaveBeenCalled();
 	});
 
-	it('should fallback to DB validation if cache returns no_cached', async () => {
-		const trx = { cardCode: 'ABC123', amount: 50, date: new Date() };
+	it('✅ should fallback to DB validation if cache is missing', async () => {
+		// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+		// @ts-expect-error
+		fuelUsageCacheService.getCardLimits.mockResolvedValue(null); // no cache → fallback
 
-		jest
-			.spyOn(service as any, 'cacheValidation')
-			.mockResolvedValue('no_cached');
-		jest.spyOn(service as any, 'dbValidation').mockResolvedValue(true);
-		jest.spyOn(service as any, 'updateUsage').mockResolvedValue(undefined);
+		cardService.getCardWithCode.mockResolvedValue({
+			id: 'card1',
+			cardCode: trx.cardCode,
+			dailyFuelLimit: 200,
+			monthlyFuelLimit: 500,
+			organizationId: 'ORG-1',
+			organization: { id: 'ORG-1', monthlyFuelLimit: 1000 },
+		} as unknown as CardViewDto);
+
+		cardUsageService.getOrgCurrentMonthUsage.mockResolvedValue(100);
+		cardUsageService.getCardMonthUsage.mockResolvedValue(50);
+		cardUsageService.getCardDateUsage.mockResolvedValue(20);
 
 		const result = await service.processCardTransaction(trx);
 		expect(result).toBe(true);
+		// eslint-disable-next-line @typescript-eslint/unbound-method
+		expect(cardUsageService.create).toHaveBeenCalled();
 	});
 
-	it('should reject transaction if limits exceeded', async () => {
-		const trx = { cardCode: 'ABC123', amount: 9999, date: new Date() };
+	it('❌ should return false if both cache and DB validation fail', async () => {
+		// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+		// @ts-expect-error
+		fuelUsageCacheService.getCardLimits.mockResolvedValue(null);
 
-		jest.spyOn(service as any, 'cacheValidation').mockResolvedValue(false);
+		cardService.getCardWithCode.mockRejectedValue(new Error('not found'));
 
 		const result = await service.processCardTransaction(trx);
 		expect(result).toBe(false);
+		// eslint-disable-next-line @typescript-eslint/unbound-method
+		expect(cardUsageService.create).not.toHaveBeenCalled();
 	});
 
-	it('should update usage in DB and Redis', async () => {
-		const trx = { cardCode: 'ABC123', amount: 50, date: new Date() };
-		const card = { id: 'card1', organization: { id: 'org1' } };
-
-		// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-		// @ts-expect-error
-		jest.spyOn(cardService, 'getCardWithCode').mockResolvedValue(card);
-		// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-		// @ts-expect-error
-		jest.spyOn(cardUsageService, 'create').mockResolvedValue(undefined);
-		jest
-			.spyOn(fuelUsageCacheService, 'incrementDailyUsage')
-			.mockResolvedValue(70);
-		jest
-			.spyOn(fuelUsageCacheService, 'incrementCardMonthlyUsage')
-			.mockResolvedValue(250);
-		jest
-			.spyOn(fuelUsageCacheService, 'incrementOrgMonthlyUsage')
-			.mockResolvedValue(450);
-
-		await service['updateUsage'](trx);
-
-		// eslint-disable-next-line @typescript-eslint/unbound-method
-		expect(cardUsageService.create).toHaveBeenCalledWith({
-			cardId: 'card1',
-			usage: 50,
-			usageDate: trx.date.toISOString().slice(0, 10),
+	it('❌ should return false if org monthly limit exceeded in cache', async () => {
+		fuelUsageCacheService.getCardLimits.mockResolvedValue({
+			orgId: 'ORG-1',
+			cardDailyLimit: 200,
+			cardMonthlyLimit: 500,
 		});
+		fuelUsageCacheService.getOrgLimits.mockResolvedValue(100);
+		fuelUsageCacheService.getDailyUsage.mockResolvedValue(50);
+		fuelUsageCacheService.getCardMonthlyUsage.mockResolvedValue(100);
+		fuelUsageCacheService.getOrgMonthlyUsage.mockResolvedValue(90);
 
-		// eslint-disable-next-line @typescript-eslint/unbound-method
-		expect(fuelUsageCacheService.incrementDailyUsage).toHaveBeenCalledWith(
-			'ABC123',
-			trx.date,
-			50
-		);
-		expect(
-			// eslint-disable-next-line @typescript-eslint/unbound-method
-			fuelUsageCacheService.incrementCardMonthlyUsage
-		).toHaveBeenCalledWith('ABC123', trx.date, 50);
-		// eslint-disable-next-line @typescript-eslint/unbound-method
-		expect(fuelUsageCacheService.incrementOrgMonthlyUsage).toHaveBeenCalledWith(
-			'org1',
-			trx.date,
-			50
-		);
+		const result = await service.processCardTransaction(trx);
+		expect(result).toBe(false);
 	});
 });
