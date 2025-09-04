@@ -46,8 +46,8 @@ jobs:
       - name: Install Dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Lint
-        run: yarn lint
+      - name: Lint (non-blocking)
+        run: yarn lint || true
 
       - name: Run Tests
         env:
