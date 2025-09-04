@@ -1,0 +1,37 @@
+{
+	"compilerOptions": {
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		"resolvePackageJsonExports": true,
+		"resolveJsonModule": true,
+		"esModuleInterop": true,
+		"isolatedModules": true,
+		"declaration": true,
+		"removeComments": true,
+		"emitDecoratorMetadata": true,
+		"experimentalDecorators": true,
+		"allowSyntheticDefaultImports": true,
+		"target": "ES2023",
+		"sourceMap": true,
+		"outDir": "./dist",
+		"baseUrl": "./",
+		"incremental": true,
+		"skipLibCheck": true,
+		"strictNullChecks": true,
+		"forceConsistentCasingInFileNames": true,
+		"noImplicitAny": false,
+		"strictBindCallApply": false,
+		"noFallthroughCasesInSwitch": false,
+		"paths": {
+			"@app": ["./src/modules/app/"],
+			"@app/*": ["./src/modules/app/*"],
+			"@business_flow": ["./src/modules/business_flow/"],
+			"@infra": ["./src/modules/pkg/infrastructure"],
+			"@infra/*": ["./src/modules/pkg/infrastructure/"],
+			"@port/*": ["./src/modules/pkg/infrastructure/port/*"],
+			"@internal": ["./src/modules/internal/"]
+		}
+	},
+	"include": ["src"],
+	"exclude": ["node_modules", "dist", "coverage", "jest.config.ts"]
+}
