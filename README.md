@@ -136,7 +136,7 @@ CORE_HTTP_PORT=3000
 CORE_HTTP_HOSTNAME=localhost
 
 # Environment Mode
-ENV_MODE=dev
+ENV_MODE=dev.yml
 
 # PostgreSQL Configuration
 DB_POSTGRES_HOST=localhost
@@ -158,7 +158,7 @@ NOTE: Keep i mind, `DB_POSTGRES_SYNCHRONIZE` must bet set to false in production
 ### Run it
 
 ```bash
-yarn start:dev
+yarn start:dev.yml
 ```
 
 ## Testing

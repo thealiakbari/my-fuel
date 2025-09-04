@@ -1,0 +1,64 @@
+name: MyFuel CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: myfuel_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U test_user -d myfuel_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Run Tests
+        env:
+          DB_POSTGRES_HOST: localhost
+          DB_POSTGRES_PORT: 5432
+          DB_POSTGRES_USER: test_user
+          DB_POSTGRES_PASSWORD: test_password
+          DB_POSTGRES_DATABASE: myfuel_test
+          DB_REDIS_HOST: localhost
+          DB_REDIS_PORT: 6379
+        run: yarn test
+
+      - name: Build Project
+        run: yarn build
